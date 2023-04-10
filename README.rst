@@ -4,21 +4,13 @@ Introduction
 
 
 
-.. image:: https://img.shields.io/discord/327254708534116352.svg
-    :target: https://adafru.it/discord
-    :alt: Discord
-
-
-.. image:: https://github.com/CedarGroveStudios/ThermalCameraLite/workflows/Build%20CI/badge.svg
-    :target: https://github.com/CedarGroveStudios/ThermalCameraLite/actions
-    :alt: Build Status
-
-
 .. image:: https://img.shields.io/badge/code%20style-black-000000.svg
     :target: https://github.com/psf/black
     :alt: Code Style: Black
 
 A lighter version of the original PyGamer/PyBadge thermal imaging tool.
+
+NOTE: Only the ``code.py`` file in the ``thermalcameralite_bundle`` is different than the original Thermal Camera code.
 
 .. image:: https://github.com/CedarGroveStudios/ThermalCameraLite/blob/main/media/graphics/DSC06005a.jpg
   :width: 500
@@ -53,7 +45,7 @@ Project Description
 This lighter version of the Thermal Camera is identical to the original version except the setup, histogram, and alarm code was removed to reduce the memory footprint. The display resolution and overall performance (including image frame rate) did not change.
 
 In addition to Adafruit libraries, the Thermal Camera Lite utilizes a number of PyGamer/PyBadge-stored files and conversion helpers in order to operate:
- -  ``thermalcameralite_code.py`` (renamed to code.py), the primary code module compatible with CircuitPython 8.0.0, stored in the root directory
+ -  ``thermalcameralite_code.py`` (renamed to code.py), the primary code module compatible with CircuitPython 8.0.x, stored in the root directory
  -  ``thermalcamera_config.py``, a Python-formatted list of default operating parameters, stored in the root directory
  -  ``thermalcamera_splash.bmp``, a bitmapped graphics file used for the opening splash screen, stored in the root directory
  -  ``OpenSans-9.bdf``, a sans serif font file, stored in the ``fonts`` folder
