@@ -1,10 +1,10 @@
-# SPDX-FileCopyrightText: 2022 Jan Goolsbey for Adafruit Industries
+# SPDX-FileCopyrightText: 2023 JG for Cedar Grove Maker Studios
 # SPDX-License-Identifier: MIT
 
 """
-`thermalcamera`
+`thermalcameralite`
 ================================================================================
-PyGamer/PyBadge Thermal Camera Project
+PyGamer/PyBadge Thermal Camera Lite Project
 """
 
 import time
@@ -15,7 +15,6 @@ import busio
 from ulab import numpy as np
 import displayio
 import neopixel
-from analogio import AnalogIn
 from digitalio import DigitalInOut
 from simpleio import map_range, tone
 from adafruit_display_text.label import Label
@@ -24,7 +23,7 @@ from adafruit_display_shapes.rect import Rect
 import adafruit_amg88xx
 from index_to_rgb.iron import index_to_rgb
 from thermalcamera_converters import celsius_to_fahrenheit, fahrenheit_to_celsius
-from thermalcamera_config import ALARM_F, MIN_RANGE_F, MAX_RANGE_F, SELFIE
+from thermalcamera_config import MIN_RANGE_F, MAX_RANGE_F, SELFIE
 
 
 # Instantiate the integral display and define its size
@@ -35,16 +34,6 @@ HEIGHT = display.height
 
 # Load the text font from the fonts folder
 font_0 = bitmap_font.load_font("/fonts/OpenSans-9.bdf")
-
-# Instantiate the joystick if available
-if hasattr(board, "JOYSTICK_X"):
-    # PyGamer with joystick
-    HAS_JOYSTICK = True
-    joystick_x = AnalogIn(board.JOYSTICK_X)
-    joystick_y = AnalogIn(board.JOYSTICK_Y)
-else:
-    # PyBadge with buttons
-    HAS_JOYSTICK = False  # PyBadge with buttons
 
 # Enable the speaker
 DigitalInOut(board.SPEAKER_ENABLE).switch_to_output(value=True)
@@ -64,14 +53,9 @@ panel = keypad.ShiftRegisterKeys(
 )
 
 # Define front panel button event values
-BUTTON_LEFT = 7  # LEFT button
-BUTTON_UP = 6  # UP button
-BUTTON_DOWN = 5  # DOWN button
-BUTTON_RIGHT = 4  # RIGHT button
 BUTTON_FOCUS = 3  # SELECT button
 BUTTON_SET = 2  # START button
 BUTTON_HOLD = 1  # button A
-BUTTON_IMAGE = 0  # button B
 
 # Initiate the AMG8833 Thermal Camera
 i2c = busio.I2C(board.SCL, board.SDA, frequency=400000)
@@ -99,11 +83,8 @@ SENSOR_DATA = np.array(range(SENSOR_AXIS**2)).reshape((SENSOR_AXIS, SENSOR_AXIS)
 GRID_DATA = np.array(range(GRID_AXIS**2)).reshape((GRID_AXIS, GRID_AXIS)) / (
     GRID_AXIS**2
 )
-# Set up the histogram accumulation narray
-# HISTOGRAM = np.zeros(GRID_AXIS)
 
-# Convert default alarm and min/max range values from config file
-ALARM_C = fahrenheit_to_celsius(ALARM_F)
+# Convert default min/max range values from config file
 MIN_RANGE_C = fahrenheit_to_celsius(MIN_RANGE_F)
 MAX_RANGE_C = fahrenheit_to_celsius(MAX_RANGE_F)
 
@@ -117,6 +98,7 @@ WHITE = 0xFFFFFF
 
 # Text colors for setup helper's on-screen parameters
 SETUP_COLORS = [("ALARM", WHITE), ("RANGE", RED), ("RANGE", CYAN)]
+
 
 # ### Helpers ###
 def play_tone(freq=440, duration=0.01):
@@ -147,33 +129,6 @@ def update_image_frame(selfie=False):
                 image_group[((_row * GRID_AXIS) + _col)].fill = color
 
 
-def update_histo_frame():
-    """Calculate and display histogram"""
-    min_histo.text = str(MIN_RANGE_F)  # Display the legend
-    max_histo.text = str(MAX_RANGE_F)
-
-    histogram = np.zeros(GRID_AXIS)  # Clear histogram accumulation array
-    # Collect camera data and calculate the histogram
-    for _row in range(0, GRID_AXIS):
-        for _col in range(0, GRID_AXIS):
-            histo_index = int(map_range(GRID_DATA[_col, _row], 0, 1, 0, GRID_AXIS - 1))
-            histogram[histo_index] = histogram[histo_index] + 1
-
-    histo_scale = np.max(histogram) / (GRID_AXIS - 1)
-    if histo_scale <= 0:
-        histo_scale = 1
-
-    # Display the histogram
-    for _col in range(0, GRID_AXIS):
-        for _row in range(0, GRID_AXIS):
-            if histogram[_col] / histo_scale > GRID_AXIS - 1 - _row:
-                image_group[((_row * GRID_AXIS) + _col)].fill = index_to_rgb(
-                    round((_col / GRID_AXIS), 3)
-                )
-            else:
-                image_group[((_row * GRID_AXIS) + _col)].fill = BLACK
-
-
 def ulab_bilinear_interpolation():
     """2x bilinear interpolation to upscale the sensor data array; by @v923z
     and @David.Glaude."""
@@ -183,104 +138,6 @@ def ulab_bilinear_interpolation():
     GRID_DATA[::, 1::2] = GRID_DATA[::, :-1:2]
     GRID_DATA[::, 1::2] += GRID_DATA[::, 2::2]
     GRID_DATA[::, 1::2] /= 2
-
-
-# pylint: disable=too-many-branches
-# pylint: disable=too-many-statements
-def setup_mode():
-    """Change alarm threshold and minimum/maximum range values"""
-    status_label.color = WHITE
-    status_label.text = "-SET-"
-
-    ave_label.color = BLACK  # Turn off average label and value display
-    ave_value.color = BLACK
-
-    max_value.text = str(MAX_RANGE_F)  # Display maximum range value
-    min_value.text = str(MIN_RANGE_F)  # Display minimum range value
-
-    time.sleep(0.8)  # Show SET status text before setting parameters
-    status_label.text = ""  # Clear status text
-
-    param_index = 0  # Reset index of parameter to set
-
-    setup_state = "SETUP"  # Set initial state
-    while setup_state == "SETUP":
-        # Select parameter to set
-        setup_state = "SELECT_PARAM"  # Parameter selection state
-        while setup_state == "SELECT_PARAM":
-            param_index = max(0, min(2, param_index))
-            status_label.text = SETUP_COLORS[param_index][0]
-            image_group[param_index + 226].color = BLACK
-            status_label.color = BLACK
-            time.sleep(0.25)
-            image_group[param_index + 226].color = SETUP_COLORS[param_index][1]
-            status_label.color = WHITE
-            time.sleep(0.25)
-
-            param_index -= get_joystick()
-
-            _buttons = panel.events.get()
-            if _buttons and _buttons.pressed:
-                if _buttons.key_number == BUTTON_UP:  # HOLD button pressed
-                    param_index = param_index - 1
-                if _buttons.key_number == BUTTON_DOWN:  # SET button pressed
-                    param_index = param_index + 1
-                if _buttons.key_number == BUTTON_HOLD:  # HOLD button pressed
-                    play_tone(1319, 0.030)  # Musical note E6
-                    setup_state = "ADJUST_VALUE"  # Next state
-                if _buttons.key_number == BUTTON_SET:  # SET button pressed
-                    play_tone(1319, 0.030)  # Musical note E6
-                    setup_state = "EXIT"  # Next state
-
-        # Adjust parameter value
-        param_value = int(image_group[param_index + 230].text)
-
-        while setup_state == "ADJUST_VALUE":
-            param_value = max(32, min(157, param_value))
-            image_group[param_index + 230].text = str(param_value)
-            image_group[param_index + 230].color = BLACK
-            status_label.color = BLACK
-            time.sleep(0.05)
-            image_group[param_index + 230].color = SETUP_COLORS[param_index][1]
-            status_label.color = WHITE
-            time.sleep(0.2)
-
-            param_value += get_joystick()
-
-            _buttons = panel.events.get()
-            if _buttons and _buttons.pressed:
-                if _buttons.key_number == BUTTON_UP:  # HOLD button pressed
-                    param_value = param_value + 1
-                if _buttons.key_number == BUTTON_DOWN:  # SET button pressed
-                    param_value = param_value - 1
-                if _buttons.key_number == BUTTON_HOLD:  # HOLD button pressed
-                    play_tone(1319, 0.030)  # Musical note E6
-                    setup_state = "SETUP"  # Next state
-                if _buttons.key_number == BUTTON_SET:  # SET button pressed
-                    play_tone(1319, 0.030)  # Musical note E6
-                    setup_state = "EXIT"  # Next state
-
-    # Exit setup process
-    status_label.text = "RESUME"
-    time.sleep(0.5)
-    status_label.text = ""
-
-    # Display average label and value
-    ave_label.color = YELLOW
-    ave_value.color = YELLOW
-    return int(alarm_value.text), int(max_value.text), int(min_value.text)
-
-
-def get_joystick():
-    """Read the joystick and interpret as up/down buttons (PyGamer)"""
-    if HAS_JOYSTICK:
-        if joystick_y.value < 20000:
-            # Up
-            return 1
-        if joystick_y.value > 44000:
-            # Down
-            return -1
-    return 0
 
 
 play_tone(440, 0.1)  # Musical note A4
@@ -313,66 +170,40 @@ status_label.anchor_point = (0.5, 0.5)
 status_label.anchored_position = ((WIDTH // 2) + (GRID_X_OFFSET // 2), HEIGHT // 2)
 image_group.append(status_label)  # image_group[225]
 
-alarm_label = Label(font_0, text="alm", color=WHITE)
-alarm_label.anchor_point = (0, 0)
-alarm_label.anchored_position = (1, 16)
-image_group.append(alarm_label)  # image_group[226]
-
 max_label = Label(font_0, text="max", color=RED)
 max_label.anchor_point = (0, 0)
-max_label.anchored_position = (1, 46)
-image_group.append(max_label)  # image_group[227]
-
-min_label = Label(font_0, text="min", color=CYAN)
-min_label.anchor_point = (0, 0)
-min_label.anchored_position = (1, 106)
-image_group.append(min_label)  # image_group[228]
-
-ave_label = Label(font_0, text="ave", color=YELLOW)
-ave_label.anchor_point = (0, 0)
-ave_label.anchored_position = (1, 76)
-image_group.append(ave_label)  # image_group[229]
-
-alarm_value = Label(font_0, text=str(ALARM_F), color=WHITE)
-alarm_value.anchor_point = (0, 0)
-alarm_value.anchored_position = (1, 5)
-image_group.append(alarm_value)  # image_group[230]
+max_label.anchored_position = (1, 21)
+image_group.append(max_label)  # image_group[226]
 
 max_value = Label(font_0, text=str(MAX_RANGE_F), color=RED)
 max_value.anchor_point = (0, 0)
-max_value.anchored_position = (1, 35)
-image_group.append(max_value)  # image_group[231]
+max_value.anchored_position = (1, 10)
+image_group.append(max_value)  # image_group[227]
 
-min_value = Label(font_0, text=str(MIN_RANGE_F), color=CYAN)
-min_value.anchor_point = (0, 0)
-min_value.anchored_position = (1, 95)
-image_group.append(min_value)  # image_group[232]
+ave_label = Label(font_0, text="ave", color=YELLOW)
+ave_label.anchor_point = (0, 0)
+ave_label.anchored_position = (1, 62)
+image_group.append(ave_label)  # image_group[228]
 
 ave_value = Label(font_0, text="---", color=YELLOW)
 ave_value.anchor_point = (0, 0)
-ave_value.anchored_position = (1, 65)
-image_group.append(ave_value)  # image_group[233]
+ave_value.anchored_position = (1, 51)
+image_group.append(ave_value)  # image_group[229]
 
-min_histo = Label(font_0, text="", color=None)
-min_histo.anchor_point = (0, 0.5)
-min_histo.anchored_position = (GRID_X_OFFSET, 121)
-image_group.append(min_histo)  # image_group[234]
+min_label = Label(font_0, text="min", color=CYAN)
+min_label.anchor_point = (0, 0)
+min_label.anchored_position = (1, 104)
+image_group.append(min_label)  # image_group[230]
 
-max_histo = Label(font_0, text="", color=None)
-max_histo.anchor_point = (1, 0.5)
-max_histo.anchored_position = (WIDTH - 2, 121)
-image_group.append(max_histo)  # image_group[235]
-
-range_histo = Label(font_0, text="-RANGE-", color=None)
-range_histo.anchor_point = (0.5, 0.5)
-range_histo.anchored_position = ((WIDTH // 2) + (GRID_X_OFFSET // 2), 121)
-image_group.append(range_histo)  # image_group[236]
+min_value = Label(font_0, text=str(MIN_RANGE_F), color=CYAN)
+min_value.anchor_point = (0, 0)
+min_value.anchored_position = (1, 93)
+image_group.append(min_value)  # image_group[231]
 
 # ###--- PRIMARY PROCESS SETUP ---###
 mkr_t1 = time.monotonic()  # Time marker: Primary Process Setup
 # pylint: disable=no-member
 mem_fm1 = gc.mem_free()  # Monitor free memory
-DISPLAY_IMAGE = True  # Image display mode; False for histogram
 DISPLAY_HOLD = False  # Active display mode; True to hold display
 DISPLAY_FOCUS = False  # Standard display range; True to focus display range
 
@@ -396,13 +227,12 @@ while True:
     # Put sensor data in array; limit to the range of 0, 80
     SENSOR_DATA = np.clip(np.array(sensor), 0, 80)
 
-    # Update and display alarm setting and max, min, and ave stats
+    # Update and display max, min, and ave stats
     mkr_t4 = time.monotonic()  # Time marker: Display Statistics
     v_max = np.max(SENSOR_DATA)
     v_min = np.min(SENSOR_DATA)
     v_ave = np.mean(SENSOR_DATA)
 
-    alarm_value.text = str(ALARM_F)
     max_value.text = str(celsius_to_fahrenheit(v_max))
     min_value.text = str(celsius_to_fahrenheit(v_min))
     ave_value.text = str(celsius_to_fahrenheit(v_ave))
@@ -413,18 +243,9 @@ while True:
     GRID_DATA[::2, ::2] = SENSOR_DATA  # Copy sensor data to the grid array
     ulab_bilinear_interpolation()  # Interpolate to produce 15x15 result
 
-    # Display image or histogram
+    # Display image
     mkr_t6 = time.monotonic()  # Time marker: Display Image
-    if DISPLAY_IMAGE:
-        update_image_frame(selfie=SELFIE)
-    else:
-        update_histo_frame()
-
-    # If alarm threshold is reached, flash NeoPixels and play alarm tone
-    if v_max >= ALARM_C:
-        pixels.fill(RED)
-        play_tone(880, 0.015)  # Musical note A5
-        pixels.fill(BLACK)
+    update_image_frame(selfie=SELFIE)
 
     # See if a panel button is pressed
     buttons = panel.events.get()
@@ -433,20 +254,6 @@ while True:
             # Toggle display hold (shutter)
             play_tone(1319, 0.030)  # Musical note E6
             DISPLAY_HOLD = not DISPLAY_HOLD
-
-        if buttons.key_number == BUTTON_IMAGE:
-            # Toggle image/histogram mode (display image)
-            play_tone(659, 0.030)  # Musical note E5
-            DISPLAY_IMAGE = not DISPLAY_IMAGE
-
-            if DISPLAY_IMAGE:
-                min_histo.color = None
-                max_histo.color = None
-                range_histo.color = None
-            else:
-                min_histo.color = CYAN
-                max_histo.color = RED
-                range_histo.color = BLUE
 
         if buttons.key_number == BUTTON_FOCUS:  # Toggle display focus mode
             play_tone(698, 0.030)  # Musical note F5
@@ -469,16 +276,6 @@ while True:
                 MIN_RANGE_C = fahrenheit_to_celsius(MIN_RANGE_F)
                 MAX_RANGE_C = fahrenheit_to_celsius(MAX_RANGE_F)
                 flash_status("ORIG", 0.2)
-
-        if buttons.key_number == BUTTON_SET:
-            # Activate setup mode
-            play_tone(784, 0.030)  # Musical note G5
-
-            # Invoke startup helper; update alarm and range values
-            ALARM_F, MAX_RANGE_F, MIN_RANGE_F = setup_mode()
-            ALARM_C = fahrenheit_to_celsius(ALARM_F)
-            MIN_RANGE_C = fahrenheit_to_celsius(MIN_RANGE_F)
-            MAX_RANGE_C = fahrenheit_to_celsius(MAX_RANGE_F)
 
     mkr_t7 = time.monotonic()  # Time marker: End of Primary Process
     gc.collect()
