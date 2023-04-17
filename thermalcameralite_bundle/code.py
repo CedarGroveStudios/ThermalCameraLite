@@ -53,7 +53,7 @@ panel = keypad.ShiftRegisterKeys(
 )
 
 # Define front panel button event values
-BUTTON_FOCUS = 3  # SELECT button
+BUTTON_FOCUS = 0  # button B
 BUTTON_SET = 2  # START button
 BUTTON_HOLD = 1  # button A
 
